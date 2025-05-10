@@ -3,6 +3,7 @@
 #include "common/color.hpp"
 
 #include "app.hpp"
+#include "shaders.hpp"
 
 // Palette generation from SL values
 array <vec3> hsl_palette(float saturation, float lightness, int N)

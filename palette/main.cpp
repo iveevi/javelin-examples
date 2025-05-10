@@ -3,6 +3,7 @@
 #include "common/application.hpp"
 
 #include "app.hpp"
+#include "shaders.hpp"
 
 Application::Application() : CameraApplication("Palette", { VK_KHR_SWAPCHAIN_EXTENSION_NAME })
 {

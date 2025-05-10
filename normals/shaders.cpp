@@ -1,5 +1,6 @@
 #include <common/io.hpp>
 
+#include "app.hpp"
 #include "shaders.hpp"
 
 // Shader kernels
@@ -36,12 +37,34 @@ $entrypoint(fragment)
 	fragment = vec4(0.5f + 0.5f * N, 1.0f);
 };
 
-// Debugging
-void shader_debug()
+// Pipeline compilation
+void Application::compile_pipeline()
 {
-	static const std::filesystem::path root = std::filesystem::path(__FILE__).parent_path() / "..";
+	auto [binding, attributes] = binding_and_attributes(VertexFlags::ePosition);
 
-	set_trace_destination(root / ".javelin");
+	auto vertex_spv = link(vertex).generate(Target::spirv_binary_via_glsl, Stage::vertex);
+	auto fragment_spv = link(fragment).generate(Target::spirv_binary_via_glsl, Stage::fragment);
+
+	// TODO: automatic generation by observing used layouts
+	auto bundle = littlevk::ShaderStageBundle(resources.device, resources.dal)
+		.code(vertex_spv.as <BinaryResult> (), vk::ShaderStageFlagBits::eVertex)
+		.code(fragment_spv.as <BinaryResult> (), vk::ShaderStageFlagBits::eFragment);
+
+	raster = littlevk::PipelineAssembler <littlevk::PipelineType::eGraphics>
+		(resources.device, resources.window, resources.dal)
+		.with_render_pass(render_pass, 0)
+		.with_vertex_binding(binding)
+		.with_vertex_attributes(attributes)
+		.with_shader_bundle(bundle)
+		.with_push_constant <solid_t <MVP>> (vk::ShaderStageFlagBits::eVertex, 0)
+		.with_push_constant <solid_t <u32>> (vk::ShaderStageFlagBits::eFragment, sizeof(solid_t <MVP>))
+		.cull_mode(vk::CullModeFlagBits::eNone);
+}
+
+// Debugging
+void Application::shader_debug()
+{
+	set_trace_destination(root() / ".javelin");
 
 	trace_unit("normals", Stage::vertex, vertex);
 	trace_unit("normals", Stage::vertex, fragment);
