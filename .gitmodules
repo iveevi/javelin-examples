@@ -1,0 +1,30 @@
+[submodule "imgui"]
+	path = thirdparty/imgui
+	url = https://github.com/ocornut/imgui.git
+[submodule "javelin"]
+	path = thirdparty/javelin
+	url = https://github.com/iveevi/javelin.git
+[submodule "glm"]
+	path = thirdparty/glm
+	url = https://github.com/g-truc/glm.git
+[submodule "stb"]
+	path = thirdparty/stb
+	url = https://github.com/nothings/stb
+[submodule "littlevk"]
+	path = thirdparty/littlevk
+	url = https://github.com/iveevi/littlevk.git
+[submodule "bestd"]
+	path = thirdparty/bestd
+	url = https://github.com/iveevi/bestd.git
+[submodule "freetype"]
+	path = thirdparty/freetype
+	url = https://github.com/freetype/freetype
+[submodule "tinyobjloader"]
+	path = thirdparty/tinyobjloader
+	url = https://github.com/tinyobjloader/tinyobjloader.git
+[submodule "tinyexr"]
+	path = thirdparty/tinyexr
+	url = https://github.com/syoyo/tinyexr.git
+[submodule "argparse"]
+	path = thirdparty/argparse
+	url = https://github.com/p-ranav/argparse.git
