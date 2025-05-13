@@ -5,8 +5,9 @@
 #include "vulkan_resources.hpp"
 
 // Assumes ownership of the swapchain (resizing only for now)
+template <bool Depth = true>
 struct DefaultFramebufferSet {
-	std::optional <littlevk::Image> depth;
+	std::vector <littlevk::Image> depths;
 	std::vector <vk::Framebuffer> handles;
 
 	const vk::Framebuffer &operator[](size_t i) const {
@@ -20,19 +21,22 @@ struct DefaultFramebufferSet {
 		// Framebuffer (and depth buffer) resizing here
 		auto &extent = drc.window.extent;
 
-		depth = drc.allocator()
-			.image(extent,
-				vk::Format::eD32Sfloat,
-				vk::ImageUsageFlagBits::eDepthStencilAttachment,
-				vk::ImageAspectFlagBits::eDepth);
-
 		littlevk::FramebufferGenerator generator {
 			drc.device, render_pass,
 			extent, drc.dal
 		};
 
-		for (size_t i = 0; i < drc.swapchain.images.size(); i++)
-			generator.add(drc.swapchain.image_views[i], depth->view);
+		for (size_t i = 0; i < drc.swapchain.images.size(); i++) {
+			littlevk::Image depth = drc.allocator()
+				.image(extent,
+					vk::Format::eD32Sfloat,
+					vk::ImageUsageFlagBits::eDepthStencilAttachment,
+					vk::ImageAspectFlagBits::eDepth);
+
+			generator.add(drc.swapchain.image_views[i], depth.view);
+			
+			depths.push_back(depth);
+		}
 
 		handles = generator.unpack();
 	}

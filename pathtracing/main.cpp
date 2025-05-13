@@ -18,7 +18,7 @@ struct Application : CameraApplication {
 	littlevk::Pipeline blit_pipeline;
 
 	vk::RenderPass render_pass;
-	DefaultFramebufferSet framebuffers;
+	DefaultFramebufferSet <true> framebuffers;
 
 	vk::DescriptorSet rtx_descriptor;
 	vk::DescriptorSet blit_descriptor;

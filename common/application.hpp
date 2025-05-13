@@ -21,14 +21,15 @@
 struct BaseApplication {
 	MODULE(base application);
 
+	bool imgui;
 	std::string name;
-
 	VulkanResources resources;
 
 	BaseApplication(const std::string &name_,
 			const std::vector <const char *> &extensions,
 			void (*features_include)(VulkanFeatureChain &) = nullptr,
-			void (*features_activate)(VulkanFeatureChain &) = nullptr) : name(name_)
+			void (*features_activate)(VulkanFeatureChain &) = nullptr,
+			bool imgui_ = true) : imgui(imgui_), name(name_)
 	{
 		// littlevk configuration
 		{
@@ -238,11 +239,13 @@ struct BaseApplication {
 	static void glfw_button_callback(GLFWwindow *window, int button, int action, int mods) {
 		BaseApplication *user = reinterpret_cast <BaseApplication *> (glfwGetWindowUserPointer(window));
 
-		ImGuiIO &io = ImGui::GetIO();
-		if (io.WantCaptureMouse) {
-			io.AddMouseButtonEvent(button, action);
-			user->mouse_inactive();
-			return;
+		if (user->imgui) {
+			ImGuiIO &io = ImGui::GetIO();
+			if (io.WantCaptureMouse) {
+				io.AddMouseButtonEvent(button, action);
+				user->mouse_inactive();
+				return;
+			}
 		}
 
 		if (button == GLFW_MOUSE_BUTTON_LEFT) {
@@ -254,10 +257,11 @@ struct BaseApplication {
 	}
 
 	static void glfw_cursor_callback(GLFWwindow *window, double x, double y) {
-		ImGuiIO &io = ImGui::GetIO();
-		io.MousePos = ImVec2(x, y);
-
 		BaseApplication *user = reinterpret_cast <BaseApplication *> (glfwGetWindowUserPointer(window));
+		if (user->imgui) {
+			ImGuiIO &io = ImGui::GetIO();
+			io.MousePos = ImVec2(x, y);
+		}
 
 		user->mouse_cursor(glm::vec2(x, y));
 	}

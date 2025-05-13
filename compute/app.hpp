@@ -22,7 +22,7 @@ struct Application : CameraApplication {
 	littlevk::Pipeline compute;
 
 	vk::RenderPass render_pass;
-	DefaultFramebufferSet framebuffers;
+	DefaultFramebufferSet <true> framebuffers;
 
 	Transform model_transform;
 

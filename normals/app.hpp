@@ -7,7 +7,7 @@
 struct Application : CameraApplication {
 	littlevk::Pipeline raster;
 	vk::RenderPass render_pass;
-	DefaultFramebufferSet framebuffers;
+	DefaultFramebufferSet <true> framebuffers;
 
 	Transform model_transform;
 
