@@ -11,16 +11,14 @@
 #include <ire.hpp>
 #include <rexec.hpp>
 
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/string_cast.hpp>
+
 using namespace jvl;
 using namespace jvl::ire;
 using namespace jvl::rexec;
 
 MODULE(features);
-
-// TODO: type check for soft/concrete types... layout_from only for concrete types
-// TODO: generic is anything,
-// 	but solid_t aggregates must take only concrete_generics
-//      and soft_t aggregates can take anything, defaults to solid_t is all concrete
 
 // TODO: l-value propagation
 // TODO: get line numbers for each invocation if possible?
@@ -29,67 +27,33 @@ MODULE(features);
 // TODO: for partial procedures, need to return
 // rexec_procedure when specializing...
 
-enum Textures {
-	eAlbedo,
-	eSpecular,
-	eNormal,
-	eRoughness,
-	eCount,
-};
-
-struct Tmp {
-	i32 mode;
-	static_array <vec3, eCount> sampled;
+struct SimulationInfo {
+	i32 elements;
+	f32 delta;
+	unsized_array <vec3> positions;
 
 	auto layout() {
-		return layout_from("Tmp",
-			verbatim_field(mode),
-			verbatim_field(sampled));
+		return layout_from("SimulationInfo",
+			verbatim_field(elements),
+			verbatim_field(delta),
+			verbatim_field(positions));
 	}
 };
 
-$subroutine(Tmp, sample, vec2 uv)
-{
-	Tmp result;
-
-	result.mode = 12;
-
-	for (uint32_t i = 0; i < eCount; i++) {
-		sampler2D tex(i);
-
-		result.sampled[i] = tex.sample(uv).xyz();
-	}
-
-	$return result;
-};
-
-$subroutine(vec3, eval)
-{
-	push_constant <Tmp> constants;
-
-	vec3 sum = vec3(0);
-	for (uint32_t i = 0; i < eCount; i++)
-		sum += constants.sampled[i];
-
-	$return sum / f32(eCount);
-};
-
-static_assert(is_solidifiable_layout((Layout <false, field <i32>, field <static_array <vec3, 4>>> *) nullptr));
-static_assert(aggregate <Tmp>);
-
-// using Bytes = std::vector <uint8_t>;
-
-// template <padded_type ... Ts>
-// struct soft_padded : Bytes {
-// 	// TODO: split into solid and last type...
-// };
+static_assert(aggregate <SimulationInfo>);
+static_assert(!solidifiable <SimulationInfo>);
 
 int main()
 {
-	auto tmp = solid_t <Tmp> ();
-	tmp.get <0> () = 1;
-	tmp.get <1> ()[2] = glm::vec3(0.0);
-
-	fmt::println("{}", link(sample).generate_glsl());
-	fmt::println("{}", link(eval).generate_glsl());
+	auto sbe = soft_t <SimulationInfo> ();
+	sbe.get <0> () = 1204;
+	sbe.get <1> () = 13.0f;
+	fmt::println("count: {}", sbe.count());
+	sbe.push(glm::vec3(10.0f));
+	fmt::println("count: {}", sbe.count());
+	sbe.extend({ glm::vec3(2.0f), glm::vec3(4.0f) });
+	fmt::println("count: {}", sbe.count());
+	fmt::println("[0] = ({}, {}, {})", sbe[0].x, sbe[0].y, sbe[0].z);
+	fmt::println("[1] = {}", glm::to_string((glm::vec3) sbe[1]));
+	fmt::println("[2] = {}", glm::to_string((glm::vec3) sbe[2]));
 }
