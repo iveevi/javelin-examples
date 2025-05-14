@@ -18,7 +18,7 @@ struct Inputs {
 	}
 };
 
-$rexec_vertex(Quad, $layout_out(vec2, 0), $push_constant(Inputs, 16))
+$rexec_vertex(Quad, $layout_out(vec2, 0))
 {
 	$rexec_entrypoint(main) {
 		array <vec4> locations = std::array <vec4, 6> {

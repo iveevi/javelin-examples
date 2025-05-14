@@ -20,20 +20,22 @@ include_directories(.
 
 add_subdirectory(common)
 
-add_subdirectory(colored)
-add_subdirectory(compute)
-add_subdirectory(font)
-add_subdirectory(material)
-add_subdirectory(meshlet)
-add_subdirectory(ngf)
-add_subdirectory(normals)
-add_subdirectory(palette)
-add_subdirectory(particles)
-add_subdirectory(pathtracing)
-add_subdirectory(raytracing)
+function(example target directory)
+	file(GLOB target_source CONFIGURE_DEPENDS "${directory}/*.cpp")
+	add_executable(${target} ${target_source})
+	target_link_libraries(${target} PRIVATE javelin common ${ARGN})
+endfunction()
 
-# TODO: function to generate exes
+example(ire-colored	"ire/colored")
+example(ire-compute	"ire/compute")
+example(ire-font	"ire/font"		freetype)
+example(ire-material	"ire/material")
+example(ire-meshlet	"ire/meshlet")
+example(ire-ngf		"ire/ngf")
+example(ire-normals	"ire/normals")
+example(ire-palette	"ire/palette")
+example(ire-particles	"ire/particles")
+example(ire-pathtracing	"ire/pathtracing")
+example(ire-raytracing	"ire/raytracing")
 
-# Prototype example
-add_executable(prototype prototype/main.cpp)
-target_link_libraries(prototype PRIVATE javelin common)
+example(prototype	"prototype")

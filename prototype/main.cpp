@@ -19,18 +19,13 @@
 
 #include "shaders.hpp"
 
-// Unbounded resources "mask"
+// Strongly typed descriptor sets
 template <resource_bindable ... Resources>
-struct Pending {
-	// Resources are the remaining resources
-	// which need to be bound...
-};
+struct Descriptor {};
 
-// Specialized descriptors for any subset of resources
-template <resource_bindable ... Args>
-struct Descriptor {
-	// TODO: one bind method for each resource...
-};
+// Pending resource lists
+template <resource_indicator ... Resources>
+struct Pending {};
 
 // TODO: static render pass and framebuffer!
 
