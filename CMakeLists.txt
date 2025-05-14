@@ -22,8 +22,8 @@ add_subdirectory(common)
 
 add_subdirectory(colored)
 add_subdirectory(compute)
-add_subdirectory(features)
 add_subdirectory(font)
+add_subdirectory(material)
 add_subdirectory(meshlet)
 add_subdirectory(ngf)
 add_subdirectory(normals)
@@ -31,3 +31,9 @@ add_subdirectory(palette)
 add_subdirectory(particles)
 add_subdirectory(pathtracing)
 add_subdirectory(raytracing)
+
+# TODO: function to generate exes
+
+# Prototype example
+add_executable(prototype prototype/main.cpp)
+target_link_libraries(prototype PRIVATE javelin common)
