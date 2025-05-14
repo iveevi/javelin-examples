@@ -29,89 +29,321 @@ struct Pending {
 // Specialized descriptors for any subset of resources
 template <resource_bindable ... Args>
 struct Descriptor {
-
+	// TODO: one bind method for each resource...
 };
 
-struct Application : BaseApplication {
-	$pipeline(Quad, Sunset) pipeline;
+// TODO: static render pass and framebuffer!
 
-	vk::RenderPass renderpass;
-	DefaultFramebufferSet <false> framebuffers;
+///////////////////////////////////////////
+// Objectified command buffer directives //
+///////////////////////////////////////////
 
-	Application() : BaseApplication("Features", {
-				VK_KHR_SWAPCHAIN_EXTENSION_NAME
-			}, nullptr, nullptr, false) {
-		renderpass = littlevk::RenderPassAssembler(resources.device, resources.dal)
-			.add_attachment(littlevk::default_color_attachment(resources.swapchain.format))
-			.add_attachment(littlevk::default_depth_attachment())
-			.add_subpass(vk::PipelineBindPoint::eGraphics)
-				.color_attachment(0, vk::ImageLayout::eColorAttachmentOptimal)
-				.depth_attachment(1, vk::ImageLayout::eDepthStencilAttachmentOptimal)
-				.done();
+// Managing commands buffers
+struct BeginCommands {};
+struct EndCommands {};
 
-		framebuffers.resize(resources, renderpass);
-	}
+// Managing rendeirng passes
+// TOOD: templated
+// NOTE: this is a rexec as well in the sense
+// than clear values must be provided
+struct BeginRenderPass {
+	const vk::RenderPass &renderpass;
+	const vk::Framebuffer &framebuffer;
+	vk::Extent2D extent;
+	std::vector <vk::ClearValue> clears;
+};
 
-	void configure(argparse::ArgumentParser &program) override {
-		program.add_argument("--fallback")
-			.help("use GLSL fallback fragment shader")
-			.default_value(false)
-			.flag();
-	}
+struct EndRenderPass {};
 
-	void preload(const argparse::ArgumentParser &program) override {
-		thunder::Optimizer::stable.apply(Sunset::noise);
-		thunder::Optimizer::stable.apply(Sunset::sphere);
-		thunder::Optimizer::stable.apply(Sunset::flame);
-		thunder::Optimizer::stable.apply(Sunset::scene);
-		thunder::Optimizer::stable.apply(Sunset::raymarch);
-		thunder::Optimizer::stable.apply(Sunset::mainImage);
-		thunder::Optimizer::stable.apply(Sunset::main);
+// Managing pipelines
+template <pipeline_class T>
+struct BindPipeline : T {};
+
+struct UnbindPipeline {};
+
+// Context (or state) aware command buffer directives
+template <typename T>
+struct FragmentPushConstants {
+	const T &value;
+};
+
+struct Draw {
+	uint32_t vertices;
+	uint32_t instances;
+};
+
+////////////////////////////
+// Phased command buffers //
+////////////////////////////
+
+// Contains any handles necessary to track state;
+// ideally, overall changes in state are minimized
+
+struct CommandBufferZero {
+	vk::CommandBuffer handle;
+};
+
+struct CommandBufferActive {
+	vk::CommandBuffer handle;
+};
+
+struct CommandBufferCompleted {
+	vk::CommandBuffer handle;
+};
+
+// TODO: templated with render pass rexec
+struct CommandBufferRenderPass {
+	vk::CommandBuffer handle;
+};
+
+// TODO: templated wih resources and mask...
+struct CommandBufferPipeline {
+	vk::CommandBuffer handle;
+	vk::PipelineLayout layout;
+};
+
+// Implementing execution transfers per directive
+CommandBufferActive operator|(const CommandBufferZero &cmd, const BeginCommands &)
+{
+	cmd.handle.begin(vk::CommandBufferBeginInfo());
+	return CommandBufferActive(cmd.handle);
+}
+
+CommandBufferCompleted operator|(const CommandBufferActive &cmd, const EndCommands &)
+{
+	cmd.handle.end();
+	return CommandBufferCompleted(cmd.handle);
+}
+
+CommandBufferRenderPass operator|(const CommandBufferActive &cmd, const BeginRenderPass &brp)
+{
+	auto scissor = vk::Rect2D()
+		.setExtent(brp.extent)
+		.setOffset({ 0, 0 });
 	
-		auto vspv = link(Quad::main).generate(Target::spirv_binary_via_glsl, Stage::vertex);
-		auto fspv = link(Sunset::main).generate(Target::spirv_binary_via_glsl, Stage::fragment);
+	auto viewport = vk::Viewport()
+		.setWidth(brp.extent.width)
+		.setHeight(brp.extent.height)
+		.setMaxDepth(1.0)
+		.setMinDepth(0.0)
+		.setX(0)
+		.setY(0);
+	
+	cmd.handle.setScissor(0, scissor);
+	cmd.handle.setViewport(0, viewport);
 
-		set_trace_destination("debug");
+	auto info = vk::RenderPassBeginInfo()
+		.setRenderPass(brp.renderpass)
+		.setFramebuffer(brp.framebuffer)
+		.setRenderArea(scissor)
+		.setClearValues(brp.clears);
 
-		trace_unit("sunset", Stage::fragment, Sunset::main);
-		
-		pipeline = compile(resources.device, renderpass, Quad::main, Sunset::main);
+	cmd.handle.beginRenderPass(info, vk::SubpassContents::eInline);
+
+	return CommandBufferRenderPass(cmd.handle);
+}
+
+CommandBufferActive operator|(const CommandBufferRenderPass &cmd, const EndRenderPass &)
+{
+	cmd.handle.endRenderPass();
+	return CommandBufferActive(cmd.handle);
+}
+
+template <pipeline_class T>
+CommandBufferPipeline operator|(const CommandBufferRenderPass &cmd, const BindPipeline <T> &bind)
+{
+	// TODO: depends on the kind...
+	cmd.handle.bindPipeline(vk::PipelineBindPoint::eGraphics, bind.handle);
+	return CommandBufferPipeline(cmd.handle, bind.layout);
+}
+
+// TODO: each draw should reset pending list: but we should be
+// smart with detecting already bound resources...
+CommandBufferPipeline operator|(const CommandBufferPipeline &cmd, const Draw &draw)
+{
+	cmd.handle.draw(draw.vertices, draw.instances, 0, 0);
+	// TODO: change this!
+	return cmd;
+}
+
+// TODO: infer offset automatically...
+template <typename T>
+CommandBufferPipeline operator|(const CommandBufferPipeline &cmd, const FragmentPushConstants <T> &constants)
+{
+	cmd.handle.pushConstants <T> (cmd.layout,
+		vk::ShaderStageFlagBits::eFragment,
+		0, constants.value);
+	return cmd;
+}
+
+CommandBufferRenderPass operator|(const CommandBufferPipeline &cmd, const UnbindPipeline &)
+{
+	return CommandBufferRenderPass(cmd.handle);
+}
+
+// Rendering application
+int main()
+{
+	// TODO: switch to oak...
+	auto extensions = std::vector <const char *> {
+		VK_KHR_SWAPCHAIN_EXTENSION_NAME
+	};
+
+	// littlevk configuration
+	{
+		auto &config = littlevk::config();
+		config.enable_logging = false;
+		config.enable_validation_layers = true;
+		config.abort_on_validation_error = true;
 	}
 
-	void render(const vk::CommandBuffer &cmd, uint32_t index, uint32_t) override {
-		// Configure the rendering extent
-		littlevk::viewport_and_scissor(cmd, littlevk::RenderArea(resources.window.extent));
+	// Find a suitable physical device
+	auto predicate = [&](vk::PhysicalDevice phdev) {
+		return littlevk::physical_device_able(phdev, extensions);
+	};
 
-		littlevk::RenderPassBeginInfo(2)
-			.with_render_pass(renderpass)
-			.with_framebuffer(framebuffers[index])
-			.with_extent(resources.window.extent)
-			.clear_color(0, std::array <float, 4> { 0, 0, 0, 0 })
-			.clear_depth(1, 1)
-			.begin(cmd);
+	auto phdev = littlevk::pick_physical_device(predicate);
+
+	// Initializethe resources
+	auto resources = VulkanResources::from(phdev,
+		"Prototype",
+		vk::Extent2D(1920, 1080),
+		extensions);
 	
+	auto &device = resources.device;
+	auto &window = resources.window;
+	auto &swapchain = resources.swapchain;
+	auto &command_pool = resources.command_pool;
+	auto &deallocator = resources.dal;
+	
+	// Configuring rendering resources
+	vk::RenderPass renderpass = littlevk::RenderPassAssembler
+			(resources.device, resources.dal)
+		.add_attachment(littlevk::default_color_attachment(resources.swapchain.format))
+		.add_subpass(vk::PipelineBindPoint::eGraphics)
+			.color_attachment(0, vk::ImageLayout::eColorAttachmentOptimal)
+			.done();
+
+	auto generator = littlevk::FramebufferGenerator(device,
+		renderpass,
+		window.extent,
+		deallocator);
+
+	for (size_t i = 0; i < resources.swapchain.images.size(); i++)
+		generator.add(swapchain.image_views[i]);
+
+	auto framebuffers = generator.unpack();
+
+	// Compile pipelines
+	// TODO: benchmark randomly generate
+	// shaders with various optimizations
+	// pass only if the stable variant is good
+	// (use fixed seeds for repro)
+	thunder::Optimizer::stable.apply(Sunset::noise);
+	thunder::Optimizer::stable.apply(Sunset::sphere);
+	thunder::Optimizer::stable.apply(Sunset::flame);
+	thunder::Optimizer::stable.apply(Sunset::scene);
+	thunder::Optimizer::stable.apply(Sunset::raymarch);
+	thunder::Optimizer::stable.apply(Sunset::mainImage);
+	thunder::Optimizer::stable.apply(Sunset::main);
+
+	auto shadertoy = compile(device, renderpass, Sunset::main, Quad::main);
+
+	// Rendering operation; formally is (CommandBufferZero, ...) -> CommandBufferCompleted
+	auto render = [&](const CommandBufferZero &zero, uint32_t index) -> CommandBufferCompleted {
+		static const vk::ClearValue clear = vk::ClearColorValue()
+			.setFloat32({ 0, 0, 0, 0 });
+
+		// Preparing constants data
 		auto inputs = solid_t <Inputs> ();
 
 		inputs.get <0> () = glm::vec3 {
-			resources.window.extent.width,
-			resources.window.extent.height,
+			window.extent.width,
+			window.extent.height,
 			1.0,
 		};
 
 		inputs.get <1> () = glfwGetTime();
-		
-		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.handle);
-		cmd.pushConstants <solid_t <Inputs>> (pipeline.layout,
-			vk::ShaderStageFlagBits::eFragment,
-			0, inputs);
-		cmd.draw(6, 1, 0, 0);
-	
-		cmd.endRenderPass();
+
+		// // Rendering commands
+		// auto active = zero | BeginCommands();
+		// auto rendering = active | BeginRenderPass(renderpass, framebuffers[index], window.extent, { clear });
+		// auto pipeline = rendering | BindPipeline(shadertoy);
+		// pipeline = pipeline | FragmentPushConstants(inputs) | Draw(6, 1);
+		// active = rendering | EndRenderPass();
+		// return active | EndCommands();
+
+		return zero
+			| BeginCommands()
+				| BeginRenderPass(renderpass, framebuffers[index], window.extent, { clear })
+					| BindPipeline(shadertoy)
+						| FragmentPushConstants(inputs)
+						| Draw(6, 1)
+					| UnbindPipeline()
+				| EndRenderPass()
+			| EndCommands();
+	};
+
+	// Resizing operation
+	auto resize = []() {
+
+	};
+
+	// Rendering loop
+	uint32_t count = swapchain.images.size();
+
+	auto sync = littlevk::present_syncronization(device, count).unwrap(deallocator);
+
+	auto command_buffers = device.allocateCommandBuffers({
+		command_pool,
+		vk::CommandBufferLevel::ePrimary,
+		count
+	});
+
+	Timer timer;
+
+	uint32_t frame = 0;
+	uint32_t total = 0;
+
+	while (!glfwWindowShouldClose(window.handle)) {
+		timer.reset();
+
+		glfwPollEvents();
+
+		littlevk::SurfaceOperation op;
+		op = littlevk::acquire_image(device, swapchain.handle, sync[frame]);
+		if (op.status == littlevk::SurfaceOperation::eResize) {
+			resize();
+			continue;
+		}
+
+		// Record the command buffer
+		const auto &cmd = command_buffers[frame];
+
+		render(CommandBufferZero(cmd), op.index);
+
+		// cmd.begin(vk::CommandBufferBeginInfo {});
+		// 	render(cmd, op.index, total);
+		// cmd.end();
+
+		// Submit command buffer while signaling the semaphore
+		constexpr vk::PipelineStageFlags wait_stage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+
+		vk::SubmitInfo submit_info {
+			sync.image_available[frame],
+			wait_stage, cmd,
+			sync.render_finished[frame]
+		};
+
+		resources.graphics_queue.submit(submit_info, sync.in_flight[frame]);
+
+		op = littlevk::present_image(resources.present_queue, swapchain.handle, sync[frame], op.index);
+		if (op.status == littlevk::SurfaceOperation::eResize)
+			resize();
+
+		frame = (++total) % count;
 	}
 
-	void resize() override {
-
-	}
-};
-
-APPLICATION_MAIN()
+	device.waitIdle();
+	device.freeCommandBuffers(command_pool, command_buffers);
+}
